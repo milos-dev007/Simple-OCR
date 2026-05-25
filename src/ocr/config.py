@@ -1,0 +1,28 @@
+from pathlib import Path
+
+IMAGE_HEIGHT = 32
+IMAGE_WIDTH = 256
+NORMALIZE_MEAN = 0.5
+NORMALIZE_STD = 0.5
+MAX_LABEL_LENGTH = 24
+DEFAULT_TRAIN_COUNT = 20_000
+DEFAULT_VAL_COUNT = 2_000
+DEFAULT_RANDOM_SEED = 7
+
+ROOT_DIR = Path(__file__).resolve().parents[2]
+ASSETS_DIR = ROOT_DIR / "assets"
+FONTS_DIR = ASSETS_DIR / "fonts"
+WORDS_PATH = ASSETS_DIR / "words" / "common_words.txt"
+DATA_DIR = ROOT_DIR / "data"
+GENERATED_DIR = DATA_DIR / "generated"
+TRAIN_MANIFEST_PATH = GENERATED_DIR / "train_manifest.jsonl"
+VAL_MANIFEST_PATH = GENERATED_DIR / "val_manifest.jsonl"
+ARTIFACTS_DIR = ROOT_DIR / "artifacts"
+CHECKPOINT_DIR = ARTIFACTS_DIR / "checkpoints"
+METRICS_DIR = ARTIFACTS_DIR / "metrics"
+PREDICTIONS_DIR = ARTIFACTS_DIR / "predictions"
+
+BEST_CHECKPOINT_PATH = CHECKPOINT_DIR / "best.pt"
+LAST_CHECKPOINT_PATH = CHECKPOINT_DIR / "last.pt"
+METRICS_PATH = METRICS_DIR / "train_metrics.json"
+SAMPLE_PREDICTIONS_PATH = PREDICTIONS_DIR / "sample_predictions.json"

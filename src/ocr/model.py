@@ -1,0 +1,59 @@
+import torch
+from torch import nn
+from torch.nn import functional as F
+
+
+class CRNN(nn.Module):
+    def __init__(self, num_classes, rnn_hidden_size=128):
+        super().__init__()
+        self.num_classes = num_classes
+        self.rnn_hidden_size = rnn_hidden_size
+
+        self.feature_extractor = nn.Sequential(
+            nn.Conv2d(1, 64, kernel_size=3, padding=1),
+            nn.ReLU(inplace=True),
+            nn.MaxPool2d(kernel_size=2, stride=2),
+            nn.Conv2d(64, 128, kernel_size=3, padding=1),
+            nn.ReLU(inplace=True),
+            nn.MaxPool2d(kernel_size=2, stride=2),
+            nn.Conv2d(128, 256, kernel_size=3, padding=1),
+            nn.ReLU(inplace=True),
+            nn.Conv2d(256, 256, kernel_size=3, padding=1),
+            nn.ReLU(inplace=True),
+            nn.MaxPool2d(kernel_size=2, stride=2),
+            nn.Conv2d(256, 256, kernel_size=3, padding=1),
+            nn.ReLU(inplace=True),
+            nn.MaxPool2d(kernel_size=(4, 1), stride=(4, 1)),
+        )
+
+        self.sequence_model = nn.LSTM(
+            input_size=256,
+            hidden_size=rnn_hidden_size,
+            num_layers=2,
+            bidirectional=True,
+        )
+        self.classifier = nn.Linear(rnn_hidden_size * 2, num_classes)
+
+    def forward(self, images, content_widths=None):
+        features = self.feature_extractor(images)
+        if features.shape[2] != 1:
+            raise RuntimeError(f"Expected feature height of 1, got {features.shape[2]}")
+
+        features = features.squeeze(2).permute(2, 0, 1)
+        sequence_output, _ = self.sequence_model(features)
+        logits = self.classifier(sequence_output)
+        log_probs = F.log_softmax(logits, dim=2)
+        if content_widths is None:
+            output_lengths = torch.full(
+                size=(images.shape[0],),
+                fill_value=log_probs.shape[0],
+                dtype=torch.long,
+                device=images.device,
+            )
+        else:
+            output_lengths = torch.clamp(content_widths // 8, min=1).to(images.device)
+        return log_probs, output_lengths
+
+
+def build_model(num_classes):
+    return CRNN(num_classes=num_classes)
