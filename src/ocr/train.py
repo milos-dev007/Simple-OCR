@@ -8,10 +8,11 @@ from pathlib import Path
 import numpy as np
 import torch
 from torch import nn
+from torch.nn.utils import clip_grad_norm_
 from torch.optim import Adam
 from torch.utils.data import Subset
 
-from ocr.charset import DEFAULT_CHARSET
+from ocr.charset import CHARSET_REGISTRY, DEFAULT_CHARSET, LOWERCASE_CHARSET, get_charset
 from ocr.config import (
     BEST_CHECKPOINT_PATH,
     CHECKPOINT_DIR,
@@ -37,8 +38,10 @@ def parse_args():
     parser.add_argument("--epochs", type=int)
     parser.add_argument("--batch-size", type=int)
     parser.add_argument("--learning-rate", type=float)
+    parser.add_argument("--charset", choices=["auto", *sorted(CHARSET_REGISTRY)], default="auto")
     parser.add_argument("--device", choices=["auto", "cpu", "cuda", "mps"], default="auto")
     parser.add_argument("--num-workers", type=int, default=0)
+    parser.add_argument("--clip-grad-norm", type=float)
     parser.add_argument("--seed", type=int, default=DEFAULT_RANDOM_SEED)
     parser.add_argument("--smoke", action="store_true")
     parser.add_argument("--smoke-samples", type=int, default=32)
@@ -116,14 +119,30 @@ def resolve_hyperparameters(args):
         epochs = args.epochs if args.epochs is not None else 80
         batch_size = args.batch_size if args.batch_size is not None else 4
         learning_rate = args.learning_rate if args.learning_rate is not None else 3e-3
+        clip_grad_norm = args.clip_grad_norm if args.clip_grad_norm is not None else 5.0
     else:
-        epochs = args.epochs if args.epochs is not None else 20
+        epochs = args.epochs if args.epochs is not None else 60
         batch_size = args.batch_size if args.batch_size is not None else 64
-        learning_rate = args.learning_rate if args.learning_rate is not None else 1e-3
-    return epochs, batch_size, learning_rate
+        learning_rate = args.learning_rate if args.learning_rate is not None else 3e-3
+        clip_grad_norm = args.clip_grad_norm if args.clip_grad_norm is not None else 5.0
+    return epochs, batch_size, learning_rate, clip_grad_norm
 
 
-def evaluate(model, data_loader, criterion, device):
+def resolve_charset(charset_name, manifest_path):
+    if charset_name != "auto":
+        return get_charset(charset_name)
+
+    with Path(manifest_path).open("r", encoding="utf-8") as file:
+        for line in file:
+            if not line.strip():
+                continue
+            record = json.loads(line)
+            if not LOWERCASE_CHARSET.contains(record["text"]):
+                return DEFAULT_CHARSET
+    return LOWERCASE_CHARSET
+
+
+def evaluate(model, data_loader, criterion, device, charset):
     model.eval()
     total_loss = 0.0
     batch_count = 0
@@ -147,7 +166,7 @@ def evaluate(model, data_loader, criterion, device):
                 greedy_decode(
                     log_probs.detach().cpu(),
                     input_lengths=input_lengths.detach().cpu(),
-                    charset=DEFAULT_CHARSET,
+                    charset=charset,
                 )
             )
             targets.extend(batch["texts"])
@@ -166,14 +185,14 @@ def evaluate(model, data_loader, criterion, device):
     }
 
 
-def save_checkpoint(path, model, optimizer, epoch, metrics):
+def save_checkpoint(path, model, optimizer, epoch, metrics, charset):
     payload = {
         "epoch": epoch,
         "model_state_dict": model.state_dict(),
         "optimizer_state_dict": optimizer.state_dict(),
-        "num_classes": DEFAULT_CHARSET.size,
+        "num_classes": charset.size,
         "rnn_hidden_size": model.rnn_hidden_size,
-        "charset": DEFAULT_CHARSET.to_metadata(),
+        "charset": charset.to_metadata(),
         "metrics": metrics,
         "preprocessing": {
             "image_height": 32,
@@ -185,9 +204,9 @@ def save_checkpoint(path, model, optimizer, epoch, metrics):
     torch.save(payload, path)
 
 
-def build_datasets(train_manifest_path, val_manifest_path, smoke_samples):
-    train_dataset = OCRDataset(train_manifest_path)
-    val_dataset = OCRDataset(val_manifest_path)
+def build_datasets(train_manifest_path, val_manifest_path, smoke_samples, charset):
+    train_dataset = OCRDataset(train_manifest_path, charset=charset)
+    val_dataset = OCRDataset(val_manifest_path, charset=charset)
 
     if smoke_samples is None:
         return train_dataset, val_dataset
@@ -227,14 +246,16 @@ def main():
         )
 
     set_seed(args.seed)
+    charset = resolve_charset(args.charset, train_manifest_path)
     device = select_device(args.device)
-    epochs, batch_size, learning_rate = resolve_hyperparameters(args)
+    epochs, batch_size, learning_rate, clip_grad_norm = resolve_hyperparameters(args)
 
     smoke_samples = args.smoke_samples if args.smoke else None
     train_dataset, val_dataset = build_datasets(
         train_manifest_path=train_manifest_path,
         val_manifest_path=val_manifest_path,
         smoke_samples=smoke_samples,
+        charset=charset,
     )
 
     train_loader = build_dataloader(
@@ -242,17 +263,19 @@ def main():
         batch_size=batch_size,
         shuffle=True,
         num_workers=args.num_workers,
+        pin_memory=device.type == "cuda",
     )
     val_loader = build_dataloader(
         val_dataset,
         batch_size=batch_size,
         shuffle=False,
         num_workers=args.num_workers,
+        pin_memory=device.type == "cuda",
     )
 
-    model = build_model(num_classes=DEFAULT_CHARSET.size).to(device)
+    model = build_model(num_classes=charset.size).to(device)
     optimizer = Adam(model.parameters(), lr=learning_rate)
-    criterion = nn.CTCLoss(blank=DEFAULT_CHARSET.blank_index, zero_infinity=True)
+    criterion = nn.CTCLoss(blank=charset.blank_index, zero_infinity=True)
 
     CHECKPOINT_DIR.mkdir(parents=True, exist_ok=True)
     METRICS_DIR.mkdir(parents=True, exist_ok=True)
@@ -269,9 +292,11 @@ def main():
         print("MPS fallback enabled: unsupported ops such as CTCLoss will run on CPU.")
     print(f"Train samples: {len(train_dataset)}")
     print(f"Validation samples: {len(val_dataset)}")
+    print(f"Charset: {charset.name} ({charset.size} classes including blank)")
     print(f"Epochs: {epochs}")
     print(f"Batch size: {batch_size}")
     print(f"Learning rate: {learning_rate}")
+    print(f"Gradient clip norm: {clip_grad_norm}")
     if args.smoke:
         print(
             "Smoke mode enabled: validation reuses a repeated easy training subset to force overfitting."
@@ -292,13 +317,15 @@ def main():
             log_probs, input_lengths = model(images, content_widths=content_widths)
             loss = criterion(log_probs, targets, input_lengths, target_lengths)
             loss.backward()
+            if clip_grad_norm is not None and clip_grad_norm > 0:
+                clip_grad_norm_(model.parameters(), clip_grad_norm)
             optimizer.step()
 
             running_loss += loss.item()
             batch_count += 1
 
         train_loss = running_loss / max(1, batch_count)
-        validation_metrics = evaluate(model, val_loader, criterion, device)
+        validation_metrics = evaluate(model, val_loader, criterion, device, charset)
         epoch_metrics = {
             "epoch": epoch,
             "train_loss": train_loss,
@@ -308,10 +335,10 @@ def main():
         }
         history.append(epoch_metrics)
 
-        save_checkpoint(LAST_CHECKPOINT_PATH, model, optimizer, epoch, epoch_metrics)
+        save_checkpoint(LAST_CHECKPOINT_PATH, model, optimizer, epoch, epoch_metrics, charset)
         if validation_metrics["cer"] <= best_cer:
             best_cer = validation_metrics["cer"]
-            save_checkpoint(BEST_CHECKPOINT_PATH, model, optimizer, epoch, epoch_metrics)
+            save_checkpoint(BEST_CHECKPOINT_PATH, model, optimizer, epoch, epoch_metrics, charset)
 
         with METRICS_PATH.open("w", encoding="utf-8") as file:
             json.dump(history, file, indent=2)

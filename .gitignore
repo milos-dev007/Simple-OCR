@@ -3,6 +3,8 @@ __pycache__/
 .pytest_cache/
 *.pyc
 data/generated/
+data/easy_check/
+data/easy_tiny/
 artifacts/checkpoints/
 artifacts/metrics/
 artifacts/predictions/

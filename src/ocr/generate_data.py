@@ -20,7 +20,7 @@ def parse_args():
     parser.add_argument("--val-count", type=int, default=DEFAULT_VAL_COUNT)
     parser.add_argument("--output-dir", default=str(GENERATED_DIR))
     parser.add_argument("--seed", type=int, default=DEFAULT_RANDOM_SEED)
-    parser.add_argument("--profile", choices=sorted(GENERATION_PROFILES), default="standard")
+    parser.add_argument("--profile", choices=sorted(GENERATION_PROFILES), default="easy")
     parser.add_argument("--force", action="store_true")
     return parser.parse_args()
 

@@ -1,13 +1,15 @@
 from string import ascii_lowercase, ascii_uppercase, digits
 
 BLANK_TOKEN = "<BLANK>"
-SUPPORTED_CHARACTERS = " " + digits + ascii_uppercase + ascii_lowercase
+FULL_CHARACTERS = " " + digits + ascii_uppercase + ascii_lowercase
+LOWERCASE_CHARACTERS = ascii_lowercase
 
 
 class Charset:
-    def __init__(self, characters=SUPPORTED_CHARACTERS, blank_token=BLANK_TOKEN):
+    def __init__(self, characters=FULL_CHARACTERS, blank_token=BLANK_TOKEN, name="custom"):
         self.characters = characters
         self.blank_token = blank_token
+        self.name = name
         self.blank_index = 0
         self.index_to_char = {index + 1: character for index, character in enumerate(characters)}
         self.char_to_index = {character: index for index, character in self.index_to_char.items()}
@@ -37,10 +39,23 @@ class Charset:
 
     def to_metadata(self):
         return {
+            "name": self.name,
             "blank_token": self.blank_token,
             "blank_index": self.blank_index,
             "characters": self.characters,
         }
 
 
-DEFAULT_CHARSET = Charset()
+FULL_CHARSET = Charset(characters=FULL_CHARACTERS, name="full")
+LOWERCASE_CHARSET = Charset(characters=LOWERCASE_CHARACTERS, name="lowercase")
+DEFAULT_CHARSET = FULL_CHARSET
+CHARSET_REGISTRY = {
+    FULL_CHARSET.name: FULL_CHARSET,
+    LOWERCASE_CHARSET.name: LOWERCASE_CHARSET,
+}
+
+
+def get_charset(name):
+    if name not in CHARSET_REGISTRY:
+        raise ValueError(f"Unknown charset: {name}")
+    return CHARSET_REGISTRY[name]

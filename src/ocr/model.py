@@ -33,6 +33,31 @@ class CRNN(nn.Module):
             bidirectional=True,
         )
         self.classifier = nn.Linear(rnn_hidden_size * 2, num_classes)
+        self._init_parameters()
+
+    def _init_parameters(self):
+        for module in self.modules():
+            if isinstance(module, nn.Conv2d):
+                nn.init.kaiming_normal_(module.weight, nonlinearity="relu")
+                if module.bias is not None:
+                    nn.init.zeros_(module.bias)
+            elif isinstance(module, nn.Linear):
+                nn.init.xavier_uniform_(module.weight)
+                if module.bias is not None:
+                    nn.init.zeros_(module.bias)
+
+        for name, parameter in self.sequence_model.named_parameters():
+            if "weight_ih" in name:
+                nn.init.xavier_uniform_(parameter)
+            elif "weight_hh" in name:
+                nn.init.orthogonal_(parameter)
+            elif "bias" in name:
+                nn.init.zeros_(parameter)
+                hidden_size = parameter.shape[0] // 4
+                parameter.data[hidden_size : hidden_size * 2] = 1.0
+
+        if self.classifier.bias is not None:
+            self.classifier.bias.data[0] = -2.0
 
     def forward(self, images, content_widths=None):
         features = self.feature_extractor(images)

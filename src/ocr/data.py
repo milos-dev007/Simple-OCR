@@ -58,11 +58,12 @@ def ctc_collate_fn(batch):
     }
 
 
-def build_dataloader(dataset, batch_size, shuffle, num_workers=0):
+def build_dataloader(dataset, batch_size, shuffle, num_workers=0, pin_memory=False):
     return DataLoader(
         dataset,
         batch_size=batch_size,
         shuffle=shuffle,
         num_workers=num_workers,
+        pin_memory=pin_memory,
         collate_fn=ctc_collate_fn,
     )
