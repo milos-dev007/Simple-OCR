@@ -10,3 +10,12 @@ def test_generated_labels_use_supported_characters():
         label = sample_label(rng, words)
         assert 1 <= len(label) <= 24
         assert DEFAULT_CHARSET.contains(label)
+
+
+def test_easy_profile_labels_are_single_lowercase_words():
+    words = ["hello", "world", "sample", "text", "model"]
+    rng = create_rng(456)
+
+    for _ in range(100):
+        label = sample_label(rng, words, profile="easy")
+        assert label in words

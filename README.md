@@ -46,8 +46,16 @@ python3.12 -m venv .venv
 
 ## Generate synthetic data
 
+Standard synthetic dataset:
+
 ```bash
 .venv/bin/python -m ocr.generate_data --train-count 20000 --val-count 2000
+```
+
+Easier curriculum dataset for first successful training runs:
+
+```bash
+.venv/bin/python -m ocr.generate_data --train-count 20000 --val-count 2000 --profile easy --force
 ```
 
 This creates:
@@ -63,12 +71,24 @@ Each manifest line contains:
 {"image_path": "data/generated/train/images/train_000000.png", "text": "Hello 42"}
 ```
 
+Profiles:
+
+- `standard`: mixed case, optional digits, multi-word labels, heavier augmentation
+- `easy`: single lowercase words, no digits, much lighter augmentation
+
 ## Train the OCR model
 
 Full training:
 
 ```bash
 .venv/bin/python -m ocr.train --epochs 20 --batch-size 64 --device cpu
+```
+
+Recommended first real training run:
+
+```bash
+.venv/bin/python -m ocr.generate_data --train-count 20000 --val-count 2000 --profile easy --force
+.venv/bin/python -m ocr.train --epochs 20 --batch-size 64 --num-workers 4 --device cpu
 ```
 
 Windows or Linux with an NVIDIA GPU:
@@ -164,6 +184,8 @@ Synthetic augmentation happens during dataset generation, not prediction:
 - noise
 - contrast change
 - x/y offset
+
+The `standard` profile intentionally makes the task harder. If the model collapses to the same short prediction for many images, start with `--profile easy` and only move back to `standard` after the model learns the simpler distribution.
 
 ## Why CTC
 

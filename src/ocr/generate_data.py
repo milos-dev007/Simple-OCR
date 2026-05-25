@@ -4,7 +4,14 @@ import shutil
 from pathlib import Path
 
 from ocr.config import DEFAULT_RANDOM_SEED, DEFAULT_TRAIN_COUNT, DEFAULT_VAL_COUNT, GENERATED_DIR, ROOT_DIR
-from ocr.text_generator import create_rng, load_font_paths, load_word_list, render_text_image, sample_label
+from ocr.text_generator import (
+    GENERATION_PROFILES,
+    create_rng,
+    load_font_paths,
+    load_word_list,
+    render_text_image,
+    sample_label,
+)
 
 
 def parse_args():
@@ -13,11 +20,12 @@ def parse_args():
     parser.add_argument("--val-count", type=int, default=DEFAULT_VAL_COUNT)
     parser.add_argument("--output-dir", default=str(GENERATED_DIR))
     parser.add_argument("--seed", type=int, default=DEFAULT_RANDOM_SEED)
+    parser.add_argument("--profile", choices=sorted(GENERATION_PROFILES), default="standard")
     parser.add_argument("--force", action="store_true")
     return parser.parse_args()
 
 
-def write_split(split_name, count, output_dir, words, font_paths, seed):
+def write_split(split_name, count, output_dir, words, font_paths, seed, profile):
     rng = create_rng(seed)
     split_dir = output_dir / split_name
     images_dir = split_dir / "images"
@@ -26,8 +34,8 @@ def write_split(split_name, count, output_dir, words, font_paths, seed):
     images_dir.mkdir(parents=True, exist_ok=True)
     with manifest_path.open("w", encoding="utf-8") as manifest_file:
         for index in range(count):
-            text = sample_label(rng, words)
-            image = render_text_image(text, font_paths, rng)
+            text = sample_label(rng, words, profile=profile)
+            image = render_text_image(text, font_paths, rng, profile=profile)
             image_abs_path = images_dir / f"{split_name}_{index:06d}.png"
             image.save(image_abs_path)
             try:
@@ -53,8 +61,8 @@ def main():
 
     words = load_word_list()
     font_paths = load_font_paths()
-    write_split("train", args.train_count, output_dir, words, font_paths, args.seed)
-    write_split("val", args.val_count, output_dir, words, font_paths, args.seed + 1)
+    write_split("train", args.train_count, output_dir, words, font_paths, args.seed, args.profile)
+    write_split("val", args.val_count, output_dir, words, font_paths, args.seed + 1, args.profile)
     print(f"Dataset written to {output_dir}")
 
 
