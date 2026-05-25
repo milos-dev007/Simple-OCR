@@ -143,7 +143,13 @@ def evaluate(model, data_loader, criterion, device):
 
             total_loss += loss.item()
             batch_count += 1
-            predictions.extend(greedy_decode(log_probs.detach().cpu(), charset=DEFAULT_CHARSET))
+            predictions.extend(
+                greedy_decode(
+                    log_probs.detach().cpu(),
+                    input_lengths=input_lengths.detach().cpu(),
+                    charset=DEFAULT_CHARSET,
+                )
+            )
             targets.extend(batch["texts"])
             image_paths.extend(batch["image_paths"])
 

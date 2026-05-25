@@ -55,11 +55,13 @@ def main():
     model.load_state_dict(checkpoint["model_state_dict"])
     model.eval()
 
-    image_tensor = preprocess_image_file(args.image).unsqueeze(0).to(device)
+    image_tensor, content_width = preprocess_image_file(args.image, return_width=True)
+    image_tensor = image_tensor.unsqueeze(0).to(device)
+    content_widths = torch.tensor([content_width], dtype=torch.long, device=device)
 
     with torch.no_grad():
-        log_probs, _ = model(image_tensor)
-        prediction = greedy_decode(log_probs.cpu(), charset=charset)[0]
+        log_probs, input_lengths = model(image_tensor, content_widths=content_widths)
+        prediction = greedy_decode(log_probs.cpu(), input_lengths=input_lengths.cpu(), charset=charset)[0]
 
     print(f"Predicted text: {prediction}")
 

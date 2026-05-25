@@ -50,6 +50,6 @@ def preprocess_pil_image(image, return_width=False):
     return tensor
 
 
-def preprocess_image_file(image_path):
+def preprocess_image_file(image_path, return_width=False):
     image = Image.open(image_path)
-    return preprocess_pil_image(image)
+    return preprocess_pil_image(image, return_width=return_width)
