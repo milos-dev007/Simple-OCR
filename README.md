@@ -71,6 +71,12 @@ Full training:
 .venv/bin/python -m ocr.train --epochs 20 --batch-size 64 --device cpu
 ```
 
+Windows or Linux with an NVIDIA GPU:
+
+```bash
+.venv\Scripts\python -m ocr.train --epochs 20 --batch-size 64 --device cuda
+```
+
 Apple Silicon GPU training:
 
 ```bash
@@ -78,6 +84,8 @@ PYTORCH_ENABLE_MPS_FALLBACK=1 .venv/bin/python -m ocr.train --epochs 20 --batch-
 ```
 
 This project uses `CTCLoss`, and in the current local PyTorch setup that operation is not implemented natively on MPS. Setting `PYTORCH_ENABLE_MPS_FALLBACK=1` lets the model run on the Apple GPU while unsupported ops fall back to CPU.
+
+For Windows/NVIDIA, install a CUDA-enabled PyTorch build first. The official PyTorch selector provides the current Windows install command for CUDA.
 
 Smoke overfit run:
 

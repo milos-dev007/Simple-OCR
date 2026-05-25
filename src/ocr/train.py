@@ -37,7 +37,7 @@ def parse_args():
     parser.add_argument("--epochs", type=int)
     parser.add_argument("--batch-size", type=int)
     parser.add_argument("--learning-rate", type=float)
-    parser.add_argument("--device", choices=["auto", "cpu", "mps"], default="auto")
+    parser.add_argument("--device", choices=["auto", "cpu", "cuda", "mps"], default="auto")
     parser.add_argument("--num-workers", type=int, default=0)
     parser.add_argument("--seed", type=int, default=DEFAULT_RANDOM_SEED)
     parser.add_argument("--smoke", action="store_true")
@@ -77,10 +77,18 @@ def mps_fallback_enabled():
 
 
 def select_device(requested_device):
+    cuda_available = torch.cuda.is_available()
     mps_available = torch.backends.mps.is_available()
 
     if requested_device == "cpu":
         return torch.device("cpu")
+
+    if requested_device == "cuda":
+        if not cuda_available:
+            raise SystemExit(
+                "--device cuda was requested, but CUDA is not available in this Python/PyTorch environment."
+            )
+        return torch.device("cuda")
 
     if requested_device == "mps":
         if not mps_available:
@@ -93,6 +101,9 @@ def select_device(requested_device):
             "--device mps was requested, but CTCLoss is not implemented natively on MPS here. "
             "Set PYTORCH_ENABLE_MPS_FALLBACK=1 to allow CPU fallback for unsupported ops, or use --device cpu."
         )
+
+    if cuda_available:
+        return torch.device("cuda")
 
     if mps_available and (mps_fallback_enabled() or mps_ctc_supported()):
         return torch.device("mps")
@@ -246,6 +257,8 @@ def main():
 
     print(f"Requested device: {args.device}")
     print(f"Using device: {device}")
+    if device.type == "cuda":
+        print(f"CUDA device: {torch.cuda.get_device_name(device)}")
     if device.type == "mps" and mps_fallback_enabled():
         print("MPS fallback enabled: unsupported ops such as CTCLoss will run on CPU.")
     print(f"Train samples: {len(train_dataset)}")
